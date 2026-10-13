@@ -40,6 +40,9 @@ def generate_case(case_number: int, rng: random.Random) -> dict:
         "risk_label": "legitimate",
         "policy_eligible": True,
         "expected_outcome": "auto_approve",
+        "delivery_status" : "delivered",
+        "evidence_consistent":True,
+        "return_window_days":30,
     }
 
     case["refund_amount"] = case["order_amount"]
@@ -73,7 +76,9 @@ def generate_case(case_number: int, rng: random.Random) -> dict:
         case["expected_outcome"] = "human_review"
 
     elif scenario == "contradictory_evidence":
+        case["delivery_status"] = "delivered"
         case["return_reason"] = "item_not_delivered"
+        case["evidence_consistent"] = False
         case["risk_label"] = "suspicious"
         case["expected_outcome"] = "human_review"
 
@@ -102,6 +107,9 @@ def generate_dataset(rows: int, seed: int, output: Path) -> None:
         "risk_label",
         "policy_eligible",
         "expected_outcome",
+        "delivery_status",
+        "evidence_consistent",
+        "return_window_days",
     ]
 
     with output.open("w", newline="", encoding="utf-8") as file:
