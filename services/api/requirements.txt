@@ -1,3 +1,7 @@
 fastapi[standard]
 pytest
 httpx
+SQLAlchemy[asyncio]
+psycopg[binary]
+alembic
+aiosqlite
