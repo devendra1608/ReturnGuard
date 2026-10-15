@@ -1,10 +1,5 @@
-
-from fastapi.testclient import TestClient
-
 from app.main import app
 
-
-client = TestClient(app)
 
 VALID_REQUEST = {
     "case_id": "RET-API-0001",
@@ -22,7 +17,7 @@ VALID_REQUEST = {
 }
 
 
-def test_evaluate_eligible_return():
+def test_evaluate_eligible_return(client):
     response = client.post(
         "/returns/evaluate",
         json=VALID_REQUEST,
@@ -37,9 +32,11 @@ def test_evaluate_eligible_return():
     assert len(data["reasons"]) > 0
 
 
-def test_evaluate_duplicate_request():
+def test_evaluate_duplicate_request(client):
     payload = {
         **VALID_REQUEST,
+        "case_id": "RET-API-0002",
+        "order_id": "ORD-API-0002",
         "duplicate_request": True,
     }
 
@@ -50,7 +47,7 @@ def test_evaluate_duplicate_request():
     assert response.json()["risk_level"] == "high"
 
 
-def test_reject_refund_above_order_amount():
+def test_reject_refund_above_order_amount(client):
     payload = {
         **VALID_REQUEST,
         "refund_amount": "2000.00",
@@ -61,7 +58,7 @@ def test_reject_refund_above_order_amount():
     assert response.status_code == 422
 
 
-def test_reject_negative_days_since_delivery():
+def test_reject_negative_days_since_delivery(client):
     payload = {
         **VALID_REQUEST,
         "days_since_delivery": -1,
@@ -72,7 +69,7 @@ def test_reject_negative_days_since_delivery():
     assert response.status_code == 422
 
 
-def test_reject_unexpected_fields():
+def test_reject_unexpected_fields(client):
     payload = {
         **VALID_REQUEST,
         "admin_override": True,
