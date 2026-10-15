@@ -48,3 +48,24 @@ class ReturnEvaluationResponse(BaseModel):
   risk_level: str
   reasons: list[str]
 
+class EvaluationHistoryItem(BaseModel):
+    case_id: str
+    outcome: str
+    risk_level: str
+    reasons: list[str]
+    policy_version: str
+
+
+class ReturnCaseDetail(BaseModel):
+    case_id: str
+    order_id: str
+    refund_amount: Decimal
+    days_since_delivery: int
+    return_window_days: int
+    evidence_required: bool
+    evidence_available: bool
+    duplicate_request: bool
+    previous_returns_90d: int
+    delivery_status: str
+    evidence_consistent: bool
+    evaluation: EvaluationHistoryItem

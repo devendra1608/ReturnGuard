@@ -9,6 +9,8 @@ from app.refund_engine import evaluate_return
 from app.schemas.returns import (
     ReturnEvaluationRequest,
     ReturnEvaluationResponse,
+    EvaluationHistoryItem,
+    ReturnCaseDetail,
 )
 
 app = FastAPI(
@@ -123,4 +125,83 @@ async def evaluate_return_endpoint(
         outcome=decision.outcome.value,
         risk_level=decision.risk_level.value,
         reasons=list(decision.reasons),
+    )
+
+@app.get("/returns/{case_id}/evaluations")
+async def get_evaluation_history(
+    case_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> list[EvaluationHistoryItem]:
+    return_case = await session.get(ReturnCase, case_id)
+
+    if return_case is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Return case not found",
+        )
+
+    result = await session.scalars(
+        select(Evaluation)
+        .where(Evaluation.case_id == case_id)
+        .order_by(Evaluation.created_at.desc(),Evaluation.evaluation_id.desc())
+    )
+
+    evaluations = result.all()
+
+    return[
+        EvaluationHistoryItem(
+            case_id=evaluation.case_id,
+            outcome=evaluation.outcome,
+            risk_level=evaluation.risk_level,
+            reasons=evaluation.reasons,
+            policy_version=evaluation.policy_version,
+        )
+        for evaluation in evaluations
+    ]
+
+@app.get("/returns/{case_id}")
+async def get_return_case(
+    case_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> ReturnCaseDetail:
+    return_case = await session.get(ReturnCase, case_id)
+
+    if return_case is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Return case not found",
+        )
+
+    latest_evaluation = await session.scalar(
+        select(Evaluation)
+        .where(Evaluation.case_id == case_id)
+        .order_by(Evaluation.created_at.desc(), Evaluation.evaluation_id.desc())
+        .limit(1)
+    )
+
+    if latest_evaluation is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Return case has no recorded evaluation",
+        )
+
+    return ReturnCaseDetail(
+        case_id=return_case.case_id,
+        order_id=return_case.order_id,
+        refund_amount=return_case.refund_amount,
+        days_since_delivery=return_case.days_since_delivery,
+        return_window_days=return_case.return_window_days,
+        evidence_required=return_case.evidence_required,
+        evidence_available=return_case.evidence_available,
+        duplicate_request=return_case.duplicate_request,
+        previous_returns_90d=return_case.previous_returns_90d,
+        delivery_status=return_case.delivery_status,
+        evidence_consistent=return_case.evidence_consistent,
+        evaluation=EvaluationHistoryItem(
+            case_id=latest_evaluation.case_id,
+            outcome=latest_evaluation.outcome,
+            risk_level=latest_evaluation.risk_level,
+            reasons=latest_evaluation.reasons,
+            policy_version=latest_evaluation.policy_version,
+        ),
     )
