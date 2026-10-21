@@ -12,7 +12,7 @@ from app.schemas.returns import (
     EvaluationHistoryItem,
     ReturnCaseDetail,
 )
-
+from app.review_domain import initial_case_status
 app = FastAPI(
     title="ReturnGuard API",
     description="Governed e-commerce return and refund review system",
@@ -94,6 +94,7 @@ async def evaluate_return_endpoint(
             previous_returns_90d=payload.previous_returns_90d,
             delivery_status=payload.delivery_status,
             evidence_consistent=payload.evidence_consistent,
+            status=initial_case_status(decision.outcome).value,
         )
         session.add(return_case)
         await session.flush()

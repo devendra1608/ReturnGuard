@@ -11,8 +11,9 @@ from sqlalchemy import (
     Numeric,
     String,
     func,
+    Text,
+    Uuid
 )
-from sqlalchemy import Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -37,6 +38,7 @@ class Order(Base):
         server_default=func.now(),
         nullable=False,
     )
+
 
 
 class ReturnCase(Base):
@@ -75,11 +77,17 @@ class ReturnCase(Base):
     evidence_consistent: Mapped[bool] = mapped_column(
         Boolean, nullable=False
     )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="pending_review",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
+
 
 
 class Evaluation(Base):
@@ -130,6 +138,40 @@ class AuditEvent(Base):
     details: Mapped[dict[str, object]] = mapped_column(
         JSON, nullable=False
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+class ReviewRecord(Base):
+    __tablename__ = "review_records"
+
+    review_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key = True,
+        default = uuid.uuid4,
+    )    
+    case_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("return_cases.case_id"),
+        nullable=False,
+        index=True,
+    )
+
+    reviewer_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable = False,
+    )
+    decision: Mapped[str] = mapped_column(
+        String(16),
+        nullable = False,
+    )
+    reason: Mapped[str] = mapped_column(
+        Text,
+        nullable = False,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

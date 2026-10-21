@@ -43,6 +43,11 @@ def test_evaluation_persists_all_records(client):
                 "cases": await session.scalar(
                     select(func.count()).select_from(ReturnCase)
                 ),
+                "case_status": await session.scalar(
+                    select(ReturnCase.status).where(
+                        ReturnCase.case_id == "case-db-001"
+                    )
+                ),
                 "evaluations": await session.scalar(
                     select(func.count()).select_from(Evaluation)
                 ),
@@ -58,7 +63,9 @@ def test_evaluation_persists_all_records(client):
         "cases": 1,
         "evaluations": 1,
         "audit": 1,
+        "case_status": "auto_approved",
     }
+
 
 
 def test_duplicate_case_id_is_rejected(client):
