@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.models import AuditEvent, Evaluation, Order, ReturnCase
+from app.models import AuditEvent, Evaluation, Order, ReturnCase, ReviewRecord
 from app.refund_domain import ReturnRequest
 from app.refund_engine import evaluate_return
 from app.schemas.returns import (
@@ -11,8 +11,14 @@ from app.schemas.returns import (
     ReturnEvaluationResponse,
     EvaluationHistoryItem,
     ReturnCaseDetail,
+    ReturnReviewRequest
 )
-from app.review_domain import initial_case_status
+from app.review_domain import (
+    initial_case_status,
+    CaseStatus,
+    ReviewDecision,
+    apply_review,
+)
 app = FastAPI(
     title="ReturnGuard API",
     description="Governed e-commerce return and refund review system",
@@ -206,3 +212,79 @@ async def get_return_case(
             policy_version=latest_evaluation.policy_version,
         ),
     )
+
+@app.post("/returns/{case_id}/review")
+async def review_return(
+    case_id: str,
+    payload: ReturnReviewRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    # 1. Find the case and lock it where supported.
+    result = await session.execute(
+        select(ReturnCase)
+        .where(ReturnCase.case_id == case_id)
+        .with_for_update()
+    )
+    case = result.scalar_one_or_none()
+
+    if case is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Return case not found",
+        )
+
+    # 2. Validate the current status and requested decision.
+    try:
+        new_status = apply_review(
+            current_status=CaseStatus(case.status),
+            decision=ReviewDecision(payload.decision),
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+
+    # 3. Record the state change and review history.
+    previous_status = case.status
+    case.status = new_status.value
+
+    # Temporary development identity only.
+    # Replace this with the authenticated reviewer from Keycloak later.
+    reviewer_id = "local-development-reviewer"
+
+    session.add(
+        ReviewRecord(
+            case_id=case_id,
+            reviewer_id=reviewer_id,
+            decision=payload.decision,
+            reason=payload.reason,
+        )
+    )
+
+    session.add(
+        AuditEvent(
+            case_id=case_id,
+            event_type="return_reviewed",
+            actor=reviewer_id,
+            details={
+                "decision": payload.decision,
+                "reason": payload.reason,
+                "previous_status": previous_status,
+                "new_status": new_status.value,
+            },
+        )
+    )
+
+    # 4. Commit all three changes together.
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+    return {
+        "case_id": case_id,
+        "status": new_status.value,
+    }

@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 class ReturnEvaluationRequest(BaseModel):
   """Validated input for evaluating a return request."""
@@ -69,3 +69,16 @@ class ReturnCaseDetail(BaseModel):
     delivery_status: str
     evidence_consistent: bool
     evaluation: EvaluationHistoryItem
+
+class ReturnReviewRequest(BaseModel):
+   model_config = ConfigDict(extra="forbid")
+
+   decision: Literal["approve","reject"]
+   reason: str = Field(min_length=1,max_length=2000)
+
+   @field_validator("reason")
+   @classmethod
+   def reason_must_not_be_blank(cls,value: str) -> str:
+      if not value.strip():
+         raise ValueError("Review reason cannot be blank")
+      return value.strip()
