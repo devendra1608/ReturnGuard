@@ -1,3 +1,4 @@
+
 services:
   postgres:
     image: postgres:17
@@ -17,5 +18,19 @@ services:
       retries: 10
     restart: unless-stopped
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.2
+    container_name: returnguard-keycloak
+    command: start-dev
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local_keycloak_password
+    ports:
+      - "8080:8080"
+    volumes:
+      - returnguard_keycloak_data:/opt/keycloak/data
+    restart: unless-stopped
+
 volumes:
   returnguard_postgres_data:
+  returnguard_keycloak_data:
