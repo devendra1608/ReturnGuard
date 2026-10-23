@@ -8,7 +8,7 @@ import httpx
 import pytest
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
+from app.auth import require_reviewer
 from app.db import get_session
 from app.main import app
 from app.models import (
@@ -56,7 +56,10 @@ def test_concurrent_reviews_allow_exactly_one_winner():
 
         previous_overrides = app.dependency_overrides.copy()
         app.dependency_overrides[get_session] = override_get_session
-
+        app.dependency_overrides[require_reviewer] = lambda: {
+            "sub": "test-reviewer-concurrency",
+            "realm_access": {"roles":["reviewer"]},
+        }
         suffix = uuid.uuid4().hex[:12]
         case_id = f"pg-concurrency-{suffix}"
         order_id = f"pg-order-{suffix}"

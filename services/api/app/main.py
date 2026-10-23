@@ -1,7 +1,8 @@
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import select,update
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from typing import Any
+from app.auth import require_reviewer
 from app.db import get_session
 from app.models import AuditEvent, Evaluation, Order, ReturnCase, ReviewRecord
 from app.refund_domain import ReturnRequest
@@ -217,6 +218,7 @@ async def get_return_case(
 async def review_return(
     case_id: str,
     payload: ReturnReviewRequest,
+    reviewer: dict[str, Any] = Depends(require_reviewer),
     session: AsyncSession = Depends(get_session),
 ):
     # 1. Check that the case exists.
@@ -273,8 +275,8 @@ async def review_return(
             )
 
         # 4. Prepare the review and audit records.
-        # Temporary development identity only.
-        reviewer_id = "local-development-reviewer"
+        # Identity comes from the verified JWT subject claim.
+        reviewer_id = reviewer["sub"]
 
         session.add(
             ReviewRecord(
