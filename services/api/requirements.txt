@@ -5,3 +5,4 @@ SQLAlchemy[asyncio]
 psycopg[binary]
 alembic
 aiosqlite
+PyJWT[crypto]
