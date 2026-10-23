@@ -1,5 +1,5 @@
 from fastapi import Depends, FastAPI, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select,update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -219,13 +219,8 @@ async def review_return(
     payload: ReturnReviewRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    # 1. Find the case and lock it where supported.
-    result = await session.execute(
-        select(ReturnCase)
-        .where(ReturnCase.case_id == case_id)
-        .with_for_update()
-    )
-    case = result.scalar_one_or_none()
+    # 1. Check that the case exists.
+    case = await session.get(ReturnCase, case_id)
 
     if case is None:
         raise HTTPException(
@@ -233,7 +228,7 @@ async def review_return(
             detail="Return case not found",
         )
 
-    # 2. Validate the current status and requested decision.
+    # 2. Validate the requested decision and reason.
     try:
         new_status = apply_review(
             current_status=CaseStatus(case.status),
@@ -246,40 +241,69 @@ async def review_return(
             detail=str(exc),
         ) from exc
 
-    # 3. Record the state change and review history.
     previous_status = case.status
-    case.status = new_status.value
 
-    # Temporary development identity only.
-    # Replace this with the authenticated reviewer from Keycloak later.
-    reviewer_id = "local-development-reviewer"
-
-    session.add(
-        ReviewRecord(
-            case_id=case_id,
-            reviewer_id=reviewer_id,
-            decision=payload.decision,
-            reason=payload.reason,
-        )
-    )
-
-    session.add(
-        AuditEvent(
-            case_id=case_id,
-            event_type="return_reviewed",
-            actor=reviewer_id,
-            details={
-                "decision": payload.decision,
-                "reason": payload.reason,
-                "previous_status": previous_status,
-                "new_status": new_status.value,
-            },
-        )
-    )
-
-    # 4. Commit all three changes together.
+    # 3. Atomically claim the case.
+    # The update succeeds only if the case is still pending_review.
     try:
+        result = await session.execute(
+            update(ReturnCase)
+            .where(
+                ReturnCase.case_id == case_id,
+                ReturnCase.status == CaseStatus.PENDING_REVIEW.value,
+            )
+            .values(status=new_status.value)
+        )
+
+        if result.rowcount != 1:
+            # Another request may have reviewed the case already.
+            await session.rollback()
+
+            existing_case = await session.get(ReturnCase, case_id)
+
+            if existing_case is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Return case not found",
+                )
+
+            raise HTTPException(
+                status_code=409,
+                detail="Return case is no longer pending review",
+            )
+
+        # 4. Prepare the review and audit records.
+        # Temporary development identity only.
+        reviewer_id = "local-development-reviewer"
+
+        session.add(
+            ReviewRecord(
+                case_id=case_id,
+                reviewer_id=reviewer_id,
+                decision=payload.decision,
+                reason=payload.reason,
+            )
+        )
+
+        session.add(
+            AuditEvent(
+                case_id=case_id,
+                event_type="return_reviewed",
+                actor=reviewer_id,
+                details={
+                    "decision": payload.decision,
+                    "reason": payload.reason,
+                    "previous_status": previous_status,
+                    "new_status": new_status.value,
+                },
+            )
+        )
+
+        # 5. Commit the status change and both records together.
         await session.commit()
+
+    except HTTPException:
+        raise
     except Exception:
         await session.rollback()
         raise
