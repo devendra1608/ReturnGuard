@@ -135,6 +135,62 @@ async def evaluate_return_endpoint(
         reasons=list(decision.reasons),
     )
 
+@app.get(
+    "/returns",
+    response_model=list[ReturnCaseDetail],
+    tags=["Returns"],
+)
+async def list_return_cases(
+    reviewer: dict[str, Any] = Depends(require_reviewer),
+    session: AsyncSession = Depends(get_session),
+) -> list[ReturnCaseDetail]:
+    result = await session.scalars(
+        select(ReturnCase).order_by(ReturnCase.case_id)
+    )
+    cases = result.all()
+
+    response: list[ReturnCaseDetail] = []
+
+    for return_case in cases:
+        latest_evaluation = await session.scalar(
+            select(Evaluation)
+            .where(Evaluation.case_id == return_case.case_id)
+            .order_by(
+                Evaluation.created_at.desc(),
+                Evaluation.evaluation_id.desc(),
+            )
+            .limit(1)
+        )
+
+        if latest_evaluation is None:
+            continue
+
+        response.append(
+            ReturnCaseDetail(
+                case_id=return_case.case_id,
+                order_id=return_case.order_id,
+                refund_amount=return_case.refund_amount,
+                days_since_delivery=return_case.days_since_delivery,
+                return_window_days=return_case.return_window_days,
+                evidence_required=return_case.evidence_required,
+                evidence_available=return_case.evidence_available,
+                duplicate_request=return_case.duplicate_request,
+                previous_returns_90d=return_case.previous_returns_90d,
+                delivery_status=return_case.delivery_status,
+                evidence_consistent=return_case.evidence_consistent,
+                status=return_case.status,
+                evaluation=EvaluationHistoryItem(
+                    case_id=latest_evaluation.case_id,
+                    outcome=latest_evaluation.outcome,
+                    risk_level=latest_evaluation.risk_level,
+                    reasons=latest_evaluation.reasons,
+                    policy_version=latest_evaluation.policy_version,
+                ),
+            )
+        )
+
+    return response
+
 @app.get("/returns/{case_id}/evaluations")
 async def get_evaluation_history(
     case_id: str,
@@ -205,6 +261,7 @@ async def get_return_case(
         previous_returns_90d=return_case.previous_returns_90d,
         delivery_status=return_case.delivery_status,
         evidence_consistent=return_case.evidence_consistent,
+        status=return_case.status,
         evaluation=EvaluationHistoryItem(
             case_id=latest_evaluation.case_id,
             outcome=latest_evaluation.outcome,

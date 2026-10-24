@@ -68,6 +68,7 @@ class ReturnCaseDetail(BaseModel):
     previous_returns_90d: int
     delivery_status: str
     evidence_consistent: bool
+    status: str
     evaluation: EvaluationHistoryItem
 
 class ReturnReviewRequest(BaseModel):
